@@ -9,14 +9,24 @@
 
     <Transition name="fade">
       <form v-if="pendingPhoto" class="description-card" @submit.prevent="savePhoto">
-        <img :src="pendingPhoto.dataUrl" alt="Preview of the captured photo" />
+        <div class="preview">
+          <img :src="pendingPhoto.dataUrl" alt="Preview of the captured photo" />
+          <button
+              type="button"
+              class="ghost"
+              @click="openCropperForPending"
+              :disabled="isSaving"
+          >
+            Adjust crop
+          </button>
+        </div>
         <label class="field">
           <span>Add a description</span>
           <textarea
-            v-model="pendingDescription"
-            rows="3"
-            placeholder="What makes this moment special?"
-            maxlength="280"
+              v-model="pendingDescription"
+              rows="3"
+              placeholder="What makes this moment special?"
+              maxlength="280"
           ></textarea>
         </label>
         <div class="form-actions">
@@ -31,8 +41,45 @@
       </form>
     </Transition>
 
-    <PhotoGallery :photos="photos" />
+    <Transition name="fade">
+      <form v-if="editingDraft && editingTarget" class="description-card" @submit.prevent="applyEdit">
+        <div class="preview">
+          <img :src="editingDraft.dataUrl" alt="Preview of the selected photo" />
+          <button type="button" class="ghost" @click="openCropperForEdit" :disabled="isUpdating">
+            Adjust crop
+          </button>
+        </div>
+        <label class="field">
+          <span>Update the description</span>
+          <textarea
+              v-model="editingDescription"
+              rows="3"
+              maxlength="280"
+              placeholder="Add more detail to this memory"
+          ></textarea>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="primary" :disabled="isUpdating">
+            <span v-if="isUpdating">Saving…</span>
+            <span v-else>Save changes</span>
+          </button>
+          <button type="button" class="link" @click="closeEdit" :disabled="isUpdating">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Transition>
+
+    <PhotoGallery :photos="photos" @edit="beginEdit" @delete="requestDelete" />
   </main>
+
+  <PhotoCropper
+      v-if="cropDraft"
+      :src="cropDraft.dataUrl"
+      :format="cropDraft.format"
+      @cancel="handleCropCancel"
+      @confirm="handleCropConfirm"
+  />
 </template>
 
 <script setup lang="ts">
@@ -41,13 +88,25 @@ import { ref, watch } from 'vue';
 
 import CameraCapture, { PhotoDraft } from './components/CameraCapture.vue';
 import PhotoGallery, { PhotoEntry } from './components/PhotoGallery.vue';
+import PhotoCropper from './components/PhotoCropper.vue';
 
 const STORAGE_KEY = 'camera-journal-photos';
+
+const inferFormat = (dataUrl: string): string => {
+  const match = dataUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);/);
+  return match ? match[1] : 'jpeg';
+};
 
 const photos = ref<PhotoEntry[]>(loadFromStorage());
 const pendingPhoto = ref<PhotoDraft | null>(null);
 const pendingDescription = ref('');
 const isSaving = ref(false);
+const cropDraft = ref<PhotoDraft | null>(null);
+const cropContext = ref<'new' | 'edit' | null>(null);
+const editingTarget = ref<PhotoEntry | null>(null);
+const editingDraft = ref<PhotoDraft | null>(null);
+const editingDescription = ref('');
+const isUpdating = ref(false);
 
 function loadFromStorage(): PhotoEntry[] {
   if (typeof window === 'undefined') {
@@ -61,9 +120,22 @@ function loadFromStorage(): PhotoEntry[] {
       return [];
     }
 
-    const parsed = JSON.parse(raw) as PhotoEntry[];
+    const parsed = JSON.parse(raw) as Partial<PhotoEntry>[];
 
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+        .filter((entry): entry is PhotoEntry => typeof entry === 'object' && !!entry)
+        .map((entry) => ({
+          id: entry.id ?? nanoid(),
+          dataUrl: entry.dataUrl ?? '',
+          description: entry.description ?? '',
+          createdAt: entry.createdAt ?? new Date().toISOString(),
+          format: entry.format ?? inferFormat(entry.dataUrl ?? ''),
+        }))
+        .filter((entry) => Boolean(entry.dataUrl));
   } catch (error) {
     console.error('Unable to load stored photos', error);
     return [];
@@ -71,20 +143,60 @@ function loadFromStorage(): PhotoEntry[] {
 }
 
 watch(
-  photos,
-  (value) => {
-    if (typeof window === 'undefined') {
-      return;
-    }
+    photos,
+    (value) => {
+      if (typeof window === 'undefined') {
+        return;
+      }
 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-  },
-  { deep: true }
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    },
+    { deep: true }
 );
 
 const startDescription = (draft: PhotoDraft) => {
-  pendingPhoto.value = draft;
+  cropContext.value = 'new';
+  cropDraft.value = draft;
+  pendingPhoto.value = null;
   pendingDescription.value = '';
+};
+
+const openCropperForPending = () => {
+  if (!pendingPhoto.value) {
+    return;
+  }
+
+  cropContext.value = 'new';
+  cropDraft.value = { ...pendingPhoto.value };
+};
+
+const openCropperForEdit = () => {
+  if (!editingDraft.value) {
+    return;
+  }
+
+  cropContext.value = 'edit';
+  cropDraft.value = { ...editingDraft.value };
+};
+
+const handleCropCancel = () => {
+  if (cropContext.value === 'new' && !pendingPhoto.value) {
+    discardPending();
+  }
+
+  cropDraft.value = null;
+  cropContext.value = null;
+};
+
+const handleCropConfirm = (draft: PhotoDraft) => {
+  if (cropContext.value === 'new') {
+    pendingPhoto.value = draft;
+  } else if (cropContext.value === 'edit') {
+    editingDraft.value = draft;
+  }
+
+  cropDraft.value = null;
+  cropContext.value = null;
 };
 
 const savePhoto = () => {
@@ -99,6 +211,7 @@ const savePhoto = () => {
     dataUrl: pendingPhoto.value.dataUrl,
     description: pendingDescription.value.trim(),
     createdAt: new Date().toISOString(),
+    format: pendingPhoto.value.format || inferFormat(pendingPhoto.value.dataUrl),
   };
 
   photos.value = [newPhoto, ...photos.value];
@@ -110,6 +223,72 @@ const savePhoto = () => {
 const discardPending = () => {
   pendingPhoto.value = null;
   pendingDescription.value = '';
+  if (cropContext.value === 'new') {
+    cropContext.value = null;
+    cropDraft.value = null;
+  }
+};
+
+const beginEdit = (id: string) => {
+  const target = photos.value.find((photo) => photo.id === id);
+
+  if (!target) {
+    return;
+  }
+
+  editingTarget.value = { ...target };
+  editingDraft.value = {
+    dataUrl: target.dataUrl,
+    format: target.format || inferFormat(target.dataUrl),
+  };
+  editingDescription.value = target.description;
+};
+
+const applyEdit = () => {
+  if (!editingTarget.value || !editingDraft.value) {
+    return;
+  }
+
+  isUpdating.value = true;
+
+  photos.value = photos.value.map((photo) =>
+      photo.id === editingTarget.value?.id
+          ? {
+            ...photo,
+            dataUrl: editingDraft.value?.dataUrl ?? photo.dataUrl,
+            description: editingDescription.value.trim(),
+            format: editingDraft.value?.format || photo.format,
+          }
+          : photo
+  );
+
+  isUpdating.value = false;
+  closeEdit();
+};
+
+const closeEdit = () => {
+  editingTarget.value = null;
+  editingDraft.value = null;
+  editingDescription.value = '';
+  if (cropContext.value === 'edit') {
+    cropContext.value = null;
+    cropDraft.value = null;
+  }
+};
+
+const requestDelete = (id: string) => {
+  if (typeof window !== 'undefined') {
+    const confirmed = window.confirm('Remove this photo from your gallery?');
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  photos.value = photos.value.filter((photo) => photo.id !== id);
+
+  if (editingTarget.value?.id === id) {
+    closeEdit();
+  }
 };
 </script>
 
@@ -147,11 +326,40 @@ main {
   box-shadow: 0 18px 45px -28px rgba(15, 23, 42, 0.55);
 }
 
+.preview {
+  position: relative;
+}
+
 .description-card img {
   width: 100%;
   border-radius: 1rem;
   object-fit: cover;
   aspect-ratio: 4 / 5;
+  display: block;
+}
+
+.preview .ghost {
+  position: absolute;
+  inset: auto 1rem 1rem auto;
+  background: rgba(15, 23, 42, 0.75);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.preview .ghost:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.preview .ghost:not(:disabled):hover {
+  background: rgba(99, 102, 241, 0.9);
+  transform: translateY(-1px);
 }
 
 .field {
