@@ -70,7 +70,7 @@
       </form>
     </Transition>
 
-    <PhotoGallery :photos="photos" @edit="beginEdit" @delete="requestDelete" />
+    <PhotoGallery :photos="photos" @edit="beginEdit" @remove="confirmRemoval" />
   </main>
 
   <PhotoCropper
@@ -276,7 +276,7 @@ const closeEdit = () => {
   }
 };
 
-const requestDelete = (id: string) => {
+const confirmRemoval = (id: string) => {
   if (typeof window !== 'undefined') {
     const confirmed = window.confirm('Remove this photo from your gallery?');
     if (!confirmed) {

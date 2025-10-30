@@ -7,21 +7,21 @@
       </header>
 
       <div
-        ref="cropArea"
-        class="crop-area"
-        :style="cropAreaStyle"
-        @pointerdown="startDrag"
-        @pointermove="onDrag"
-        @pointerup="endDrag"
-        @pointerleave="endDrag"
+          ref="cropArea"
+          class="crop-area"
+          :style="cropAreaStyle"
+          @pointerdown="startDrag"
+          @pointermove="onDrag"
+          @pointerup="endDrag"
+          @pointerleave="endDrag"
       >
         <img
-          ref="imageEl"
-          :src="src"
-          alt="Photo awaiting crop"
-          class="crop-image"
-          :style="imageStyle"
-          @load="onImageLoad"
+            ref="imageEl"
+            :src="src"
+            alt="Photo awaiting crop"
+            class="crop-image"
+            :style="imageStyle"
+            @load="onImageLoad"
         />
         <div class="crop-frame" aria-hidden="true"></div>
       </div>
@@ -30,12 +30,12 @@
         <label>
           <span>Zoom</span>
           <input
-            type="range"
-            min="1"
-            max="3"
-            step="0.01"
-            v-model.number="scale"
-            @input="clampOffsets"
+              type="range"
+              min="1"
+              max="3"
+              step="0.01"
+              v-model.number="scale"
+              @input="clampOffsets"
           />
         </label>
         <div class="actions">
@@ -124,14 +124,41 @@ const resetState = () => {
   ready.value = false;
 };
 
+const resolveContainerWidth = () => {
+  if (containerRect.width) {
+    return containerRect.width;
+  }
+
+  if (cropArea.value) {
+    return cropArea.value.clientWidth;
+  }
+
+  return imageEl.value?.clientWidth ?? imageEl.value?.naturalWidth ?? 0;
+};
+
+const resolveContainerHeight = () => {
+  if (containerRect.height) {
+    return containerRect.height;
+  }
+
+  if (cropArea.value) {
+    return cropArea.value.clientHeight;
+  }
+
+  return imageEl.value?.clientHeight ?? imageEl.value?.naturalHeight ?? 0;
+};
+
 const measure = () => {
   if (!cropArea.value) {
     return;
   }
 
   const rect = cropArea.value.getBoundingClientRect();
-  containerRect.width = rect.width;
-  containerRect.height = rect.height;
+  const width = rect.width || cropArea.value.clientWidth;
+  const height = rect.height || cropArea.value.clientHeight;
+
+  containerRect.width = width || imageEl.value?.clientWidth || imageEl.value?.naturalWidth || 0;
+  containerRect.height = height || imageEl.value?.clientHeight || imageEl.value?.naturalHeight || 0;
   clampOffsets();
 };
 
@@ -168,12 +195,15 @@ const onImageLoad = () => {
 };
 
 const clampOffsets = () => {
-  if (!containerRect.width || !containerRect.height) {
+  const containerWidth = resolveContainerWidth();
+  const containerHeight = resolveContainerHeight();
+
+  if (!containerWidth || !containerHeight) {
     return;
   }
 
-  const maxX = Math.max(0, (scaledWidth.value - containerRect.width) / 2);
-  const maxY = Math.max(0, (scaledHeight.value - containerRect.height) / 2);
+  const maxX = Math.max(0, (scaledWidth.value - containerWidth) / 2);
+  const maxY = Math.max(0, (scaledHeight.value - containerHeight) / 2);
 
   offset.x = Math.min(maxX, Math.max(-maxX, offset.x));
   offset.y = Math.min(maxY, Math.max(-maxY, offset.y));
@@ -228,23 +258,31 @@ const cancel = () => {
 };
 
 const confirmCrop = () => {
-  if (!imageEl.value || !containerRect.width || !containerRect.height) {
+  if (!imageEl.value) {
     return;
   }
 
   const naturalWidth = imageEl.value.naturalWidth;
   const naturalHeight = imageEl.value.naturalHeight;
 
+  const containerWidth = resolveContainerWidth();
+  const containerHeight = resolveContainerHeight();
+
+  if (!containerWidth || !containerHeight) {
+    emit('cancel');
+    return;
+  }
+
   const scaleFactorX = naturalWidth / scaledWidth.value;
   const scaleFactorY = naturalHeight / scaledHeight.value;
 
-  const imageLeftInContainer = containerRect.width / 2 + offset.x - scaledWidth.value / 2;
-  const imageTopInContainer = containerRect.height / 2 + offset.y - scaledHeight.value / 2;
+  const imageLeftInContainer = containerWidth / 2 + offset.x - scaledWidth.value / 2;
+  const imageTopInContainer = containerHeight / 2 + offset.y - scaledHeight.value / 2;
 
   const cropX = Math.max(0, -imageLeftInContainer * scaleFactorX);
   const cropY = Math.max(0, -imageTopInContainer * scaleFactorY);
-  const cropWidth = Math.min(naturalWidth, containerRect.width * scaleFactorX);
-  const cropHeight = Math.min(naturalHeight, containerRect.height * scaleFactorY);
+  const cropWidth = Math.min(naturalWidth, containerWidth * scaleFactorX);
+  const cropHeight = Math.min(naturalHeight, containerHeight * scaleFactorY);
 
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(cropWidth);
@@ -257,20 +295,20 @@ const confirmCrop = () => {
   }
 
   context.drawImage(
-    imageEl.value,
-    cropX,
-    cropY,
-    cropWidth,
-    cropHeight,
-    0,
-    0,
-    canvas.width,
-    canvas.height
+      imageEl.value,
+      cropX,
+      cropY,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      canvas.width,
+      canvas.height
   );
 
   const preferredFormat = (props.format && props.format.startsWith('image/'))
-    ? props.format
-    : `image/${props.format || 'jpeg'}`;
+      ? props.format
+      : `image/${props.format || 'jpeg'}`;
 
   const quality = preferredFormat.includes('jpeg') ? 0.92 : undefined;
   const dataUrl = canvas.toDataURL(preferredFormat, quality);
@@ -282,16 +320,16 @@ const confirmCrop = () => {
 };
 
 watch(
-  () => props.src,
-  () => {
-    resetState();
-    nextTick(() => {
-      measure();
-      if (imageEl.value?.complete) {
-        onImageLoad();
-      }
-    });
-  }
+    () => props.src,
+    () => {
+      resetState();
+      nextTick(() => {
+        measure();
+        if (imageEl.value?.complete) {
+          onImageLoad();
+        }
+      });
+    }
 );
 
 onMounted(() => {
