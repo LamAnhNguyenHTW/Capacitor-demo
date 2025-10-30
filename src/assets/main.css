@@ -1,0 +1,29 @@
+:root {
+  color-scheme: light dark;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #1f2933;
+  background-color: #f4f7fb;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f4f7fb 0%, #ffffff 100%);
+}
+
+#app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+button {
+  font: inherit;
+}
+
+input,
+textarea {
+  font: inherit;
+}
