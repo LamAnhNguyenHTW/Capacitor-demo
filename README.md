@@ -24,18 +24,39 @@ The production-ready assets are output to the `dist/` directory.
 1. Initialize the native platforms you want to target:
 
    ```bash
-   npx cap add android
-   npx cap add ios
-   ```
+   npm init @capacitor/app@latest
+   npm i @capacitor/core
+   npm i -D @capacitor/cli
 
-2. Each time you build the web app, copy the files into the native project:
+   ```
+   
+2. Initialize Capacitor.config:
 
    ```bash
-   npm run build
-   npx cap copy
+   npx cap init
    ```
+   
+3. Install Android/IOS Plugins:
 
-3. Open the native IDE to run the application on a device or emulator:
+   ```bash
+   npm i @capacitor/android
+   #or
+   npm i @capacitor/ios
+   ```
+   
+4. Generate native projects:
+
+   ```bash
+   npx cap add android
+   #or
+   npx cap add ios
+   ```
+5. Sync projects:
+
+   ```bash
+   npx cap sync
+   ```
+6. Open the native IDE to run the application on a device or emulator:
 
    ```bash
    npx cap open android
