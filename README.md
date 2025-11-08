@@ -50,7 +50,6 @@ The app automatically uses the Capacitor Camera plugin when running on a native 
 - `src/App.vue` – orchestrates capturing photos, collecting descriptions, and persisting data in `localStorage`.
 - `src/components/CameraCapture.vue` – handles photo capture via the Capacitor Camera plugin or a browser fallback.
 - `src/components/PhotoGallery.vue` – renders the responsive gallery of saved memories.
-- `capacitor.config.ts` – Capacitor project configuration shared by all native targets.
 
 ## Useful scripts
 
