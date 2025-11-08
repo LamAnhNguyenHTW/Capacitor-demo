@@ -24,7 +24,6 @@ The production-ready assets are output to the `dist/` directory.
 1. Initialize the native platforms you want to target:
 
    ```bash
-   npm init @capacitor/app@latest
    npm i @capacitor/core
    npm i -D @capacitor/cli
 
